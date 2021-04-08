@@ -26,6 +26,7 @@ module PixLineTransmitter(input rst
     wire [2:0] state;
     reg [4:0] bits_send;
     reg [23:0] pixel_reg;
+	 wire [23:0] pix_wire;
     reg reset;
     wire startPos;
     wire done;
@@ -40,19 +41,25 @@ module PixLineTransmitter(input rst
     assign state = {rst, go, startPos};
     assign startPos = cnt64 == 0;
     assign out = started ? (cbit ? signalPos : signalNeg) : 0;
-    
+	 
+    genvar n;
+	generate
+		for (n = 0; n < 24; n = n + 1) begin : gblock
+					assign	pix_wire[23 - n] = pixel[n];
+		end
+	endgenerate
     
     always @(posedge clk) begin
     
         if (last) begin
-            pixel_reg <= pixel;
+				pixel_reg <= pix_wire;
         end
         
         casex (state)
             RESET: begin
                 bits_send <= 0;
                 cbit <= 0;
-                pixel_reg <= pixel;
+					 pixel_reg <= pix_wire;
                 ready <= 0;
                 started <= 0;
             end
@@ -73,13 +80,13 @@ endmodule
 
 module linetransmitter(input clk
     , input rst
-    , input [ADD_WIDTH - 1:0] pixel_count
+    , input [ADD_WIDTH:0] pixel_count
     , input [23:0] pixel
     , output [ADD_WIDTH - 1:0] address
     , output out
     , output done);
     
-    parameter ADD_WIDTH = 3;
+    parameter ADD_WIDTH = 8;
     
     localparam RESET = 3'b1xx
     , DATA_SENDING = 3'b000
@@ -87,7 +94,7 @@ module linetransmitter(input clk
     
     reg [ADD_WIDTH - 1:0] addressReg;
     reg [ADD_WIDTH:0] sentCnt;
-    reg [5:0] resetCnt;
+    reg [11:0] resetCnt;
     reg acquiring;
     reg [5:0] clk64;
     reg readyp;
@@ -106,11 +113,12 @@ module linetransmitter(input clk
     wire neg;
     
     assign dataSent = sentCnt - 1 == pixel_count;
-    assign resetDone = resetCnt == 6'd40;
+    assign resetDone = resetCnt == 12'd2750;
     assign state = {rst, dataSent, resetDone};
     assign startPos = clk64 == 0;
     assign address = addressReg;
     assign out = dataSent ? 0 : (fin ? 0 : pixout);
+	 assign done = resetDone;
     
     always @(posedge clk) begin
         acquiring <= ~ready;
@@ -152,7 +160,6 @@ module linetransmitter(input clk
                     resetCnt <= resetCnt + 1'b1;
                 end
             end
-        
         endcase
     end
     
